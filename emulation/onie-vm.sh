@@ -64,7 +64,7 @@ USB_IMG="${USB_DIR}/usb-drive"
 
 #USB_SIZE="256M"
 # Supersize it for installer debug
-USB_SIZE="2G"
+USB_SIZE="8G"
 
 # Local mount point in host for loop back mount of USB filesystem.
 # ( will require root privileges )
@@ -74,7 +74,7 @@ USB_MNT_DIR="${USB_DIR}/usb-mount"
 HARD_DRIVE=${EMULATION_DIR}/onie-${ONIE_MACHINE_TARGET}-demo.qcow2
 
 # Size in GB of virtual drive
-HARD_DRIVE_SIZE=2G
+HARD_DRIVE_SIZE=16G
 
 # Formatting takes a while, so once that is done, keep a copy
 # of the empty formatted drive so that clean installs
@@ -557,7 +557,7 @@ function fxnApplyDefaults()
     # KVM defaults
     DO_QEMU_NVME_DRIVE="FALSE"
     DO_QEMU_UEFI_BIOS="FALSE"
-    QEMU_MEMORY_M="2048"
+    QEMU_MEMORY_M="8192"
     QEMU_CPUS="2"
     # Just edit these in place
     if [ "$APPLY_HARDCODE_DEFAULTS" = "TRUE" ];then

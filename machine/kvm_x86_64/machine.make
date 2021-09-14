@@ -72,7 +72,7 @@ SECURE_BOOT_EXT = yes
 
 # Enable GRUB verification of files and passwords
 # Requires secure boot
-SECURE_GRUB = yes
+#SECURE_GRUB = yes
 
 # Define the makefile with security settings, to
 # provide the option of using another file with different settings.
