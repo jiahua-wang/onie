@@ -203,14 +203,16 @@ validate_input_image()
     ############################################################
     ###  ONIE Image Identifier GUID (16 Bytes)               ###
     ############################################################
-    ###  Signature Offset           (16 Bytes)               ###
+    ###  Signature  Identifier GUID (16 Bytes)               ###
     ############################################################
-    ###  Signature Lenth            (16 Bytes)               ###
+    ###  Signature Offset           (8 Bytes)                ###
+    ############################################################
+    ###  Signature Lenth            (8 Bytes)                ###
     ############################################################
 
     # Interpret the 'image information block' at the end of the image
     onie_image_id=$(tail -c $iib_size $image | head -c $guid_size | hexdump -v -e '4/1 "%02x" "-" 2/1 "%02x" "-"
-                    2/1 "%x" "-" 2/1 "%x" "-" 6/1 "%x"')
+                    2/1 "%02x" "-" 2/1 "%02x" "-" 6/1 "%02x"')
     signature_id=$(tail -c $(($iib_size-$guid_size)) $image | head -c $guid_size | hexdump -v -e '4/1 "%02x" "-"
                     2/1 "%02x" "-" 2/1 "%02x" "-" 2/1 "%02x" "-" 6/1 "%02x"')
 
