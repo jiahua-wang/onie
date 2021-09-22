@@ -10,6 +10,13 @@
 syslog_tag=onie-exec
 
 install_result="/var/run/install.rc"
+default_signature="/var/tmp/installer.sign"
+ONIE_IMAGE_GUID="216e9675-be17-46c7-aa71-e525eac83bd2"
+CERT_TYPE_PKCS7_GUID="4aafd29d-68df-49ee-8aa9-347d375665a7"
+iib_size=48
+guid_size=16
+iib_len_offset=16
+iib_len_size=8
 
 # If the NOS install returns success then reboot.
 finish_nos_install()
@@ -78,6 +85,224 @@ check_installer()
     return 1
 }
 
+check_secure_boot()
+{
+    # Check if the SecureBoot is enabled on the system
+	local sb_path sm_file sb sm
+
+	sb_path=$(find /sys/firmware/efi/efivars -name SecureBoot-* 2>/dev/null)
+	sm_path=$(find /sys/firmware/efi/efivars -name SetupMode-* 2>/dev/null)
+
+	if [ -f "$sb_path" ] && [ -f "$sm_path" ]; then
+		sb=$(hexdump -v -e '/1 "%d\ "' $sb_path|cut -d' ' -f 5)
+		sm=$(hexdump -v -e '/1 "%d\ "' $sm_path|cut -d' ' -f 5)
+
+		if [ "$sb" = "1" ] && [ "$sm" = "0" ]; then
+			return 0
+		fi
+	fi
+
+    return 1
+}
+
+export_efi_certs() {
+    dest=$1
+
+    mkdir -p $dest/db
+    mkdir -p $dest/dbx
+
+    old_dir=$PWD
+
+    cd $dest/db
+    mokutil -x --db  > /dev/null 2>&1
+    mokutil -x --pk  > /dev/null 2>&1
+    mokutil -x --kek > /dev/null 2>&1
+    mokutil -x       > /dev/null 2>&1
+    ls -1
+    cd $old_dir
+
+    cd $dest/dbx
+    mokutil -x --dbx > /dev/null 2>&1
+    ls -1
+    cd $old_dir
+}
+
+verify_signed_installer()
+{
+    local sig="$1"
+
+    keys_dir=$(mktemp -d)
+    export_efi_certs $keys_dir
+
+    # Signature is calculated the sha1sum of the installer image file
+    image_digest=$(mktemp /var/tmp/installer.sign.XXXXXXXXXX)
+    sha1sum $onie_installer | awk '{ print $1 }' > $image_digest
+
+    for key in $(find $keys_dir/dbx -type f -name "*.der")
+    do
+        pem_key="${key%.*}.pem"
+        [ -f $pem_key ] && rm -f $pem_key
+
+        openssl x509 -in $key -inform der -out $pem_key -outform pem || {
+            log_console_msg "Warning: Failed to create $pem_key from $key. Skipping $key."
+            continue
+        }
+        openssl cms -verify -inform der -in $sig -content $image_digest -binary -CAfile $pem_key -nointern -certfile $pem_key > /dev/null 2>&1 || {
+            log_failure_msg "Signed ONIE installer image is signed with a revoked key."
+            rm -rf $image_digest $keys_dir
+            return 1
+        }
+    done
+
+    for key in $(find $keys_dir/db -type f -name "*.der")
+    do
+        pem_key="${key%.*}.pem"
+        [ -f $pem_key ] && rm -f $pem_key
+
+        openssl x509 -in $key -inform der -out $pem_key -outform pem || {
+            log_console_msg "Warning: Failed to create $pem_key from $key. Skipping $key."
+            continue
+        }
+        openssl cms -verify -inform der -in $sig -content $image_digest -binary -CAfile $pem_key -nointern -certfile $pem_key > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            # check if this key is part of mokx
+            mokutil --mokx --test-key $key > /dev/null 2>&1
+            if [ $? -eq 1 ]; then
+                log_failure_msg "Signed ONIE installer image is signed with a revoked key."
+                break
+            fi
+
+            # Verificatin passed. Remove the temporary file and return
+            log_console_msg "Signed ONIE installer image verification successfull"
+            rm -rf $image_digest $keys_dir
+            return 0
+        fi
+    done
+
+    log_failure_msg "Signed ONIE Installer image verification failed"
+    rm -rf $image_digest $keys_dir
+    return 1
+}
+
+validate_input_image()
+{
+    local image="$1"
+
+    ############################################################
+    #              Signed ONIE Installer Image                 #
+    ############################################################
+    ###  ONIE Installer Image       (Signature Offset Bytes) ###
+    ############################################################
+    ###  Image Signature            (Signature Len Bytes)    ###
+    ############################################################
+    ###  Image Information Block    (48 Bytes)               ###
+    ############################################################
+
+    ############################################################
+    #                Image Information Block                   #
+    ############################################################
+    ###  ONIE Image Identifier GUID (16 Bytes)               ###
+    ############################################################
+    ###  Signature Offset           (16 Bytes)               ###
+    ############################################################
+    ###  Signature Lenth            (16 Bytes)               ###
+    ############################################################
+
+    # Interpret the 'image information block' at the end of the image
+    onie_image_id=$(tail -c $iib_size $image | head -c $guid_size | hexdump -v -e '4/1 "%02x" "-" 2/1 "%02x" "-"
+                    2/1 "%x" "-" 2/1 "%x" "-" 6/1 "%x"')
+    signature_id=$(tail -c $(($iib_size-$guid_size)) $image | head -c $guid_size | hexdump -v -e '4/1 "%02x" "-"
+                    2/1 "%02x" "-" 2/1 "%02x" "-" 2/1 "%02x" "-" 6/1 "%02x"')
+
+    # Verify if the GUIDs match
+    if [ "$onie_image_id" != "$ONIE_IMAGE_GUID" ] || [ "$signature_id" != "$CERT_TYPE_PKCS7_GUID" ]; then
+        log_debug_msg "ONIE installer - Image Information Block not found"
+        return 1
+    fi
+
+    return 0
+}
+
+split_signed_image()
+{
+    local image="$1"
+    local signature="$2"
+
+    # GUIDs matched, Split the installer image into its components
+    signature_offset="0x$(tail -c $iib_len_offset $image | head -c $iib_len_size | hexdump -v -e '/1 "%02x"')"
+    signature_offset_base10=$(printf "%u" $signature_offset)
+    signature_len="0x$(tail -c $(( $iib_len_offset-$iib_len_size )) $image | head -c $iib_len_size | hexdump -v -e '/1 "%02x"')"
+    signature_len_base10=$(printf "%u" $signature_len)
+
+    log_console_msg "Extracting the image signature ... "
+	tail -c $(( signature_len_base10 + iib_size )) $image | head -c $signature_len_base10 > $signature || {
+        log_failure_msg "Splitting the signed ONIE installer image $image failed"
+        rm -f $signature
+        return 1
+    }
+
+    log_console_msg "Removing the image signature and the information block from the installer image ... "
+    dd if=/dev/null of=$image bs=1 seek=$signature_offset_base10 >/dev/null 2>&1 || {
+        log_failure_msg "Splitting the signed ONIE installer image $image failed"
+        rm -f $signature
+        return 1
+    }
+
+    return 0
+}
+
+check_signed_installer()
+{
+    # Check whether the image passed by 'onie-nos-install',
+    # 'onie-self-update' or 'discover' is compatible with the
+    # 'signed ONIE installable image' format
+    local image_type="$1"
+    local signature=$default_signature
+
+    # Check if the SecureBoot is enable on the system
+    check_secure_boot || {
+        # SecureBoot is not enabled.
+        # Allow traditional or signed ONIE installer image format.
+        validate_input_image $onie_installer && {
+            log_console_msg "Installer image $onie_installer is a signed ONIE installer"
+            split_signed_image $onie_installer $signature || {
+                log_failure_msg "Unable to strip the signature off $onie_installer"
+                return 1
+            }
+            # Skip verifying the signature when secure boot is disabled
+            rm -f $signature
+        }
+        return 0
+    }
+
+    log_console_msg "Secure Boot mode is enabled"
+    # Check if the installer follows 'signed ONIE installable image' format
+    validate_input_image $onie_installer || {
+        log_failure_msg "Signature header not found in $onie_installer. Please use a valid signed ONIE installer"
+        return 1
+    }
+
+    # Strip the signature of the signed ONIE installer
+    split_signed_image $onie_installer $signature || {
+        log_failure_msg "Unable to strip the signature off $onie_installer"
+        return 1
+    }
+
+    # After the split, onie_installer contains only the unsigned installer data
+    log_console_msg "A signed ONIE Installer Image detected. Installer: $onie_installer, Signature: $signature"
+    log_console_msg "Verifying the signature using EFI keys ..."
+
+    # Verify the signature with efi keys
+    verify_signed_installer $signature && {
+        log_console_msg "Signature verification of $onie_installer is successful"
+        rm -f $signature
+        return 0
+    }
+    log_failure_msg "Signature verification of $onie_installer failed"
+    rm -f $signature
+    return 1
+}
+
 run_installer()
 {
     export onie_exec_url="$1"
@@ -92,6 +317,10 @@ run_installer()
 
     image_type=$(get_image_type $onie_installer)
     check_installer $image_type || return 1
+
+    if [ "$onie_secure_boot" = "yes" ]; then
+        check_signed_installer $image_type || return 1
+    fi
 
     chmod +x $onie_installer
     # Send installer execution output to stdout or /dev/console

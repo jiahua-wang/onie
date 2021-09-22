@@ -416,6 +416,12 @@ $(IMAGE_UPDATER_STAMP): $(UPDATER_IMAGE_PARTS_COMPLETE) $(UPDATER_IMAGE_PARTS_PL
 	     fakeroot -- $(SCRIPTDIR)/onie-mk-installer.sh onie $(ROOTFS_ARCH) $(MACHINEDIR) \
 		$(MACHINE_CONF) $(INSTALLER_DIR) \
 		$(UPDATER_IMAGE) $(UPDATER_IMAGE_PARTS) $(UPDATER_IMAGE_PARTS_PLATFORM)
+ifeq ($(SECURE_BOOT_ENABLE),yes)
+	    mv $(UPDATER_IMAGE) $(UPDATER_IMAGE).unsigned
+	    fakeroot -- $(SCRIPTDIR)/onie-installer-sign.sh $(ONIE_VENDOR_SECRET_KEY_PEM) \
+                $(ONIE_VENDOR_CERT_PEM) $(UPDATER_IMAGE).unsigned $(UPDATER_IMAGE)
+endif
+
 	$(Q) touch $@
 
 PXE_EFI64_IMAGE		= $(IMAGEDIR)/onie-recovery-$(ARCH)-$(MACHINE_PREFIX).efi64.pxe
