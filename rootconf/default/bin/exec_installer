@@ -147,7 +147,7 @@ verify_signed_installer()
             log_console_msg "Warning: Failed to create $pem_key from $key. Skipping $key."
             continue
         }
-        openssl cms -verify -inform der -in $sig -content $image_digest -binary -CAfile $pem_key -nointern -certfile $pem_key > /dev/null 2>&1 || {
+        openssl cms -verify -inform der -in $sig -content $image_digest -binary -CAfile $pem_key -nointern -certfile $pem_key > /dev/null 2>&1 && {
             log_failure_msg "Signed ONIE installer image is signed with a revoked key."
             rm -rf $image_digest $keys_dir
             return 1

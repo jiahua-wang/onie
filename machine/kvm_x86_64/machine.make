@@ -68,7 +68,7 @@ SECURE_BOOT_ENABLE = yes
 
 # Enable extended secure boot:
 #  Activates - ONIE password
-SECURE_BOOT_EXT = yes
+#SECURE_BOOT_EXT = yes
 
 # Enable GRUB verification of files and passwords
 # Requires secure boot
