@@ -1,0 +1,59 @@
+================================================================================
+Installing ONIE on bcm_xlr_th5_svk
+================================================================================
+
+Cross-Compiling ONIE
+====================
+
+To compile ONIE first change directories to "build-config" and then
+type "make -j4 MACHINEROOT=../machine/broadcom/ MACHINE=bcm_xlr_th5_svk all".  For example:
+
+  $ cd build-config
+  $ make -j4 MACHINEROOT=../machine/broadcom/ MACHINE=bcm_xlr_th5_svk all
+
+When complete, the ONIE binaries are located in "build/images":
+
+-rw-rw-r-- 5499148  Apr 18 16:03 bcm_xlr_th5_svk-r0.initrd
+-rw-rw-r-- 3261216  Apr 18 16:16 bcm_xlr_th5_svk-r0.vmlinuz
+-rw-rw-r-- 20185088 Apr 18 16:16 onie-recovery-x86_64-bcm_xlr_th5_svk-r0.iso
+-rw-rw-r-- 8818551  Apr 18 16:16 onie-updater-x86_64-bcm_xlr_th5_svk-r0
+
+Installing ONIE on a Blank Machine
+==================================
+
+To install ONIE on a new machine use one of the onie-recovery images.
+
+Overview
+--------
+
+An "ONIE recovery image" is used for:
+
+1. installing ONIE on a blank machine, i.e. what manufacturing would
+   use.
+
+2. recovering a destroyed ONIE system.
+
+The recovery images is:
+
+. <machine>.iso       -- a hybrid ISO image.
+
+ISO Recovery Image
+------------------
+
+The .iso image is used to create the .efi64.pxe image.
+
+You can also use the .iso image to create a bootable USB memory stick.
+Use ``dd`` to copy the .iso image to a USB stick and boot from that::
+
+  dd if=<machine>.iso of=/dev/sdX bs=10M
+
+For can find the correct ``/dev/sdX`` by inspecing the ``dmesg``
+output after inserting the USB stick into your work station.
+
+To enable booting from USB in the BIOS:
+
+1. Insert the USB stick (needs to be in before configuring BIOS)
+
+2. Power on the bcm_xlr_th5_svk and enter the BIOS configuration by pressing DEL key
+
+3. Save & Exit -> Boot Override -> USB Device Name

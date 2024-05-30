@@ -282,5 +282,6 @@
     { "Vendor": "wnc", "Platform": "wnc_qsa63_oam8_48", "BuildEnv": "Debian10", "Release": "2022.02br", "Architecture": "armv8a",  "Notes": "No notes." },
     { "Vendor": "wnc", "Platform": "wnc_rseb_w1_32",    "BuildEnv": "Debian9",  "Release": "2020.05br", "Architecture": "amd64",   "Notes": "No notes." },
     { "Vendor": "wnc", "Platform": "wnc_ssb1_w1",       "BuildEnv": "Debian9",  "Release": "2020.05br", "Architecture": "amd64",   "Notes": "No notes." },
+    { "Vendor": "broadcom", "Platform": "bcm_xlr_th5_svk",       "BuildEnv": "Debian9",  "Release": "2020.05br", "Architecture": "amd64",   "Notes": "No notes." },
     { "Vendor": "wnc", "Platform": "wnc_sst1_n1",       "BuildEnv": "Debian9",  "Release": "2020.05br", "Architecture": "amd64",   "Notes": "No notes." }
 ]
